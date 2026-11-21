@@ -1,0 +1,62 @@
+name: 编译 ipa（不签名）
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # xcodegen 要求 project.yml 里引用的目录必须存在，先建占位
+      - name: 占位模型目录
+        run: mkdir -p Models/GFPGAN.mlmodelc Models/Seg.mlmodelc Models/ModNet.mlmodelc Models/u2netp.mlmodelc
+
+      - name: 还原模型（有分片就解，没有也不阻断）
+        run: |
+          set -e
+          if ls Tools/Seg.mlmodelc.zip.part* >/dev/null 2>&1; then
+            cat Tools/Seg.mlmodelc.zip.part* > /tmp/seg.zip && unzip -oq /tmp/seg.zip -d Models/
+          fi
+          if ls Tools/ModNet.mlmodelc.zip.part* >/dev/null 2>&1; then
+            cat Tools/ModNet.mlmodelc.zip.part* > /tmp/modnet.zip && unzip -oq /tmp/modnet.zip -d Models/
+          fi
+          if [ -f Tools/u2netp.mlmodelc.zip ]; then unzip -oq Tools/u2netp.mlmodelc.zip -d Models/; fi
+          du -sh Models/* || true
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成工程
+        run: xcodegen generate
+
+      # 不签名：本步只要拿编译结果，签名交给 Sideloadly
+      - name: 编译
+        run: |
+          xcodebuild \
+            -project WhiteBorder.xcodeproj \
+            -scheme WhiteBorder \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: 打 ipa
+        run: |
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/WhiteBorder.app out/Payload/
+          cd out && zip -r -q WhiteBorder.ipa Payload
+          cd .. && ls -lh out/WhiteBorder.ipa
+
+      - name: 上传 ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhiteBorder-ipa
+          path: out/WhiteBorder.ipa
