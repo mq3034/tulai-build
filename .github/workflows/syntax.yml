@@ -1,0 +1,33 @@
+name: 语法检查
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Sources/**'
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 版本
+        run: swift --version
+
+      - name: 逐个文件语法解析
+        run: |
+          fail=0
+          for f in Sources/*.swift; do
+            echo "---- $f"
+            if ! swiftc -parse "$f" 2>&1; then
+              echo "FAILED: $f"
+              fail=1
+            fi
+          done
+          if [ $fail -ne 0 ]; then
+            echo '有文件解析失败'
+            exit 1
+          fi
+          echo '全部解析通过'
