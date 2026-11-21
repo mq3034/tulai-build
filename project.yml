@@ -1,0 +1,71 @@
+name: WhiteBorder
+options:
+  bundleIdPrefix: com.jianhuo
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGNING_ALLOWED: "NO"
+
+targets:
+  WhiteBorder:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      # 预编译的 Core ML 模型必须以「文件夹引用」加入：
+      # XcodeGen 默认会遍历目录、把里面的文件逐个加进工程，那样 .mlmodelc
+      # 会被展平，运行时就找不到 GFPGAN.mlmodelc 这个目录。
+      # 加了 type: folder 之后，整个目录原样拷进 App 包根目录，
+      # 与 `人脸.swift` 里 Bundle.main.url(forResource:"GFPGAN", withExtension:"mlmodelc") 对齐。
+      - path: Models/GFPGAN.mlmodelc
+        type: folder
+
+      # 端侧抠像模型（isnetis → Core ML，fp16 约 84MB）。
+      # 和 GFPGAN 一样必须是「文件夹引用」：否则 XcodeGen 会把 .mlmodelc 里面的文件
+      # 逐个摊平加进工程，运行时就找不到 Seg.mlmodelc 这个目录。
+      # 对应 Sources/端侧分割.swift 里的 Bundle.main.url(forResource:"Seg", withExtension:"mlmodelc")
+      - path: Models/Seg.mlmodelc
+        type: folder
+
+      # 端侧抠图模型（MODNet 蒸馏版，约 25MB）。
+      # 和 GFPGAN / Seg 一样必须是「文件夹引用」，否则 XcodeGen 会把 .mlmodelc 里的文件
+      # 逐个摊平，运行时就找不到 ModNet.mlmodelc 这个目录。
+      # 对应 Sources/端侧抠图MODNet.swift 里的 Bundle.main.url(forResource:"ModNet", withExtension:"mlmodelc")
+      - path: Models/ModNet.mlmodelc
+        type: folder
+
+      # 显著性模型（u2netp，fp32 转换后约 2~3MB）：回答「该抠谁」。
+      # 和上面三个一样必须是「文件夹引用」，否则 XcodeGen 会摊平 .mlmodelc 里的文件。
+      # 对应 Sources/端侧显著性.swift 里的 Bundle.main.url(forResource:"u2netp", withExtension:"mlmodelc")
+      # 模型没就位时 Sources/端侧抠图.swift 会自动退回 Seg，不影响启动（CI 里先 mkdir 占位）。
+      - path: Models/u2netp.mlmodelc
+        type: folder
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: 图来
+        CFBundleShortVersionString: "1.0"
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleLocalizations:
+          - zh-Hans
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSPhotoLibraryUsageDescription: 需要读取相册里的图片来做白底图
+        NSPhotoLibraryAddUsageDescription: 需要把处理好的图片存进相册
+        NSLocalNetworkUsageDescription: 需要连同一 Wi-Fi 下的电脑，把图送去电脑跑 LaMa 修复
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jianhuo.whiteborder
+        PRODUCT_NAME: WhiteBorder
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: "NO"
